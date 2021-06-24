@@ -3,16 +3,30 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:led_control/settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:udp/udp.dart';
+
 
 void main() {
   runApp(MyApp());
+}
+
+String globalIPAddress = "0.0.0.0";
+double gRed = 0, gGreen = 0, gBlue = 0;
+
+void loadPrefs() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  if (prefs.containsKey("esp-ip")) {
+    globalIPAddress = prefs.getString("esp-ip")!;
+  }
 }
 
 class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
+    loadPrefs();
     return MaterialApp(
       title: 'LEDControl',
       theme: ThemeData(
@@ -27,7 +41,9 @@ class MyApp extends StatelessWidget {
         // is not restarted.
         primarySwatch: Colors.blue,
       ),
-      routes: {'/': (context) => Home(title: 'LEDControl')},
+      routes: {
+        '/': (context) => Home(title: 'LEDControl'),
+        '/settings': (context) => Settings()},
       //home: Home(title: 'LEDControl'),
     );
   }
@@ -46,6 +62,7 @@ class Home extends StatefulWidget {
   // always marked "final".
 
   final String title;
+  bool isLoadSynced = false;
 
   @override
   _HomeState createState() => _HomeState();
@@ -71,6 +88,20 @@ class _HomeState extends State<Home> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.isLoadSynced) {
+      syncColor().then((value) => {
+        print("SHOULD SET"),
+        setState(() {
+          red = value[0];
+          gRed = value[0];
+          green = value[1];
+          gGreen = value[1];
+          blue = value[2];
+          gBlue = value[2];
+          widget.isLoadSynced = true;
+        })
+      });
+    }
     // This method is rerun every time setState is called, for instance as done
     // by the _incrementCounter method above.
     //
@@ -95,7 +126,7 @@ class _HomeState extends State<Home> {
           children: <Widget>[
             DrawerHeader(
               decoration: BoxDecoration(
-                color: Colors.blue,
+                color: Color.fromARGB(255, red.round(), green.round(), blue.round()),
               ),
               child: Text(
                 'LEDControl',
@@ -123,8 +154,7 @@ class _HomeState extends State<Home> {
             ListTile(
               title: Text('Einstellungen'),
               onTap: () {
-                // Update the state of the app.
-                // ...
+                Navigator.pushNamed(context, '/settings');
               },
             ),
           ],
@@ -183,6 +213,7 @@ class _HomeState extends State<Home> {
                   child: Slider(
                     onChanged: (newVal) {
                       sendSetUDP(context, message: "R${newVal.round()}");
+                      gRed = newVal;
                       setState(() {
                         red = newVal;
                       });
@@ -225,6 +256,7 @@ class _HomeState extends State<Home> {
                   child: Slider(
                     onChanged: (newVal) {
                       sendSetUDP(context, message: "G${newVal.round()}");
+                      gGreen = newVal;
                       setState(() {
                         green = newVal;
                       });
@@ -266,6 +298,7 @@ class _HomeState extends State<Home> {
                   child: Slider(
                     onChanged: (newVal) {
                       sendSetUDP(context, message: "B${newVal.round()}");
+                      gBlue = newVal;
                       setState(() {
                         blue = newVal;
                       });
@@ -308,8 +341,11 @@ class _HomeState extends State<Home> {
             print("SHOULD SET"),
             setState(() {
               red = value[0];
+              gRed = value[0];
               green = value[1];
+              gGreen = value[1];
               blue = value[2];
+              gBlue = value[2];
             })
           });
         },
@@ -324,7 +360,7 @@ var sender;
 var result;
 
 void sendSetUDP(BuildContext context, {required String message}) async {
-  var DESTINATION_ADDRESS=InternetAddress("192.168.1.145");
+  var DESTINATION_ADDRESS=InternetAddress(globalIPAddress);
 
   if (sender == null) {
     sender = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 65000);
@@ -346,7 +382,7 @@ void sendSetUDP(BuildContext context, {required String message}) async {
 
 Future<List<double>> syncColor() async {
 
-  var DESTINATION_ADDRESS=InternetAddress("192.168.1.145");
+  var DESTINATION_ADDRESS=InternetAddress(globalIPAddress);
 
   if (sender == null) {
     sender = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 65000);
@@ -360,7 +396,7 @@ Future<List<double>> syncColor() async {
     });
   }
 
-  List<int> data =utf8.encode('GETR');
+  List<int> data =utf8.encode('GET');
 
   do {
     print("SENDING GET");
