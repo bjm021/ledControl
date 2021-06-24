@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:udp/udp.dart';
@@ -116,6 +119,14 @@ class _HomeState extends State<Home> {
                 // ...
               },
             ),
+            Divider(),
+            ListTile(
+              title: Text('Einstellungen'),
+              onTap: () {
+                // Update the state of the app.
+                // ...
+              },
+            ),
           ],
         ),
       ),
@@ -171,6 +182,7 @@ class _HomeState extends State<Home> {
                   ),
                   child: Slider(
                     onChanged: (newVal) {
+                      sendSetUDP(context, message: "R${newVal.round()}");
                       setState(() {
                         red = newVal;
                       });
@@ -212,6 +224,7 @@ class _HomeState extends State<Home> {
                   ),
                   child: Slider(
                     onChanged: (newVal) {
+                      sendSetUDP(context, message: "G${newVal.round()}");
                       setState(() {
                         green = newVal;
                       });
@@ -252,6 +265,7 @@ class _HomeState extends State<Home> {
                   ),
                   child: Slider(
                     onChanged: (newVal) {
+                      sendSetUDP(context, message: "B${newVal.round()}");
                       setState(() {
                         blue = newVal;
                       });
@@ -290,23 +304,76 @@ class _HomeState extends State<Home> {
         backgroundColor:
             Color.fromARGB(255, red.round(), green.round(), blue.round()),
         onPressed: () {
-          sendSetUDP(context, message: "R100");
+          syncColor().then((value) => {
+            print("SHOULD SET"),
+            setState(() {
+              red = value[0];
+              green = value[1];
+              blue = value[2];
+            })
+          });
         },
         tooltip: 'Increment',
-        child: Icon(Icons.send),
+        child: Icon(Icons.sync),
       ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
 
+var sender;
+var result;
+
 void sendSetUDP(BuildContext context, {required String message}) async {
-  // creates a UDP instance and binds it to the first available network
-  // interface on port 65000.
-  var sender = await UDP.bind(Endpoint.any(port: Port(65000)));
+  var DESTINATION_ADDRESS=InternetAddress("192.168.1.145");
 
-  // send a simple string to a broadcast endpoint on port 65001.
-  var dataLength = await sender.send(message.codeUnits,
-      Endpoint.broadcast(port: Port(65001)));
+  if (sender == null) {
+    sender = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 65000);
+    sender.listen((e) {
+      Datagram? dg = sender.receive();
+      if (dg != null) {
+        String text = utf8.decode(dg.data);
+        print("received $text");
+        result = text;
+      }
+    });
+  }
 
-  print("$dataLength bytes sent.");
+
+  //sender.broadcastEnabled = true;
+  List<int> data =utf8.encode(message);
+  sender.send(data, DESTINATION_ADDRESS, 65000);
+}
+
+Future<List<double>> syncColor() async {
+
+  var DESTINATION_ADDRESS=InternetAddress("192.168.1.145");
+
+  if (sender == null) {
+    sender = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 65000);
+    sender.listen((e) {
+      Datagram? dg = sender.receive();
+      if (dg != null) {
+        String text = utf8.decode(dg.data);
+        print("received $text");
+        result = text;
+      }
+    });
+  }
+
+  List<int> data =utf8.encode('GETR');
+
+  do {
+    print("SENDING GET");
+    sender.send(data, DESTINATION_ADDRESS, 65000);
+    await Future.delayed(Duration(milliseconds: 500));
+  } while (result == null);
+
+  print("OK NOW $result");
+  List<String> resList = result.split(";");
+
+  return [
+    double.parse(resList[0]),
+    double.parse(resList[1]),
+    double.parse(resList[2])
+  ];
 }
