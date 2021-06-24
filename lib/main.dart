@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:udp/udp.dart';
 
 void main() {
   runApp(MyApp());
@@ -288,10 +289,24 @@ class _HomeState extends State<Home> {
       floatingActionButton: FloatingActionButton(
         backgroundColor:
             Color.fromARGB(255, red.round(), green.round(), blue.round()),
-        onPressed: _incrementCounter,
+        onPressed: () {
+          sendSetUDP(context, message: "R100");
+        },
         tooltip: 'Increment',
         child: Icon(Icons.send),
       ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
+}
+
+void sendSetUDP(BuildContext context, {required String message}) async {
+  // creates a UDP instance and binds it to the first available network
+  // interface on port 65000.
+  var sender = await UDP.bind(Endpoint.any(port: Port(65000)));
+
+  // send a simple string to a broadcast endpoint on port 65001.
+  var dataLength = await sender.send(message.codeUnits,
+      Endpoint.broadcast(port: Port(65001)));
+
+  print("$dataLength bytes sent.");
 }
